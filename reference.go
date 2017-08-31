@@ -49,3 +49,47 @@ type ListResp struct {
 	XMLName xml.Name `xml:"lists"`
 	Files   []File   `xml:"list>entry"`
 }
+
+// LogResp svn log struct
+type LogResp struct {
+	XMLName   xml.Name   `xml:"log"`
+	Logentrys []Logentry `xml:"logentry"`
+}
+
+// Logentry svn logentry
+type Logentry struct {
+	Revision string    `xml:"revision,attr"`
+	Author   string    `xml:"author"`
+	DateTime time.Time `xml:"date"`
+	Msg      string    `xml:"msg"`
+	Paths    []Path    `xml:"paths>path"`
+}
+
+// Path svn path
+type Path struct {
+	Action   string `xml:"action,attr"`
+	PropMods string `xml:"prop-mods,attr"`
+	TextMods string `xml:"text-mods,attr"`
+	Kind     string `xml:"kind,attr"`
+	Value    string `xml:",chardata"`
+}
+
+// InfoResp InfoResp
+type InfoResp struct {
+	XMLName xml.Name `xml:"info"`
+	Info    InfoT    `xml:"entry"`
+}
+
+// InfoT svn info
+type InfoT struct {
+	Kind        string `xml:"kind,attr"`
+	Path        string `xml:"path,attr"`
+	Revision    string `xml:"revision,attr"`
+	URL         string `xml:"url"`
+	RelativeURL string `xml:"relative-url"`
+	Repository  struct {
+		Root string `xml:"root"`
+		uuid string `xml:"uuid"`
+	} `xml:"repository"`
+	Commit CommitT `xml:"commit"`
+}

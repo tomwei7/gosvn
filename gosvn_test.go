@@ -1,6 +1,7 @@
 package svn
 
 import (
+	"log"
 	"os"
 	"testing"
 )
@@ -10,14 +11,10 @@ var svnurl string
 
 func init() {
 	svnurl = os.Getenv("TEST_SVNURL")
-}
-
-func TestInitSVN(t *testing.T) {
 	var err error
-	svn, err = NewSVN(svnurl, nil)
-	//svn.echo = true
+	svn, err = NewSVN(svnurl, &Options{Echo: true})
 	if err != nil {
-		t.Fatal(err)
+		log.Fatal(err)
 	}
 }
 
@@ -56,4 +53,22 @@ func TestTags(t *testing.T) {
 	if len(ret) != 2 {
 		t.Errorf("%+v", ret)
 	}
+}
+
+func TestLog(t *testing.T) {
+	ret, err := svn.Log("/trunk/testlog.txt")
+	if err != nil {
+		t.Error(err)
+	}
+	if len(ret.Logentrys) != 2 {
+		t.Errorf("%+v", ret)
+	}
+}
+
+func TestInfo(t *testing.T) {
+	ret, err := svn.Info("/trunk/testlog.txt")
+	if err != nil {
+		t.Error(err)
+	}
+	t.Log("%v", ret)
 }

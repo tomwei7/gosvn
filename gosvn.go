@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/url"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -28,6 +29,8 @@ const (
 const (
 	CMDBlame = "blame"
 	CMDList  = "list"
+	CMDLog   = "log"
+	CMDInfo  = "info"
 )
 
 // SVN DIR
@@ -51,6 +54,10 @@ type Options struct {
 	// separately classified certificate errors)
 	TrustServerCertFailures CAFailArg
 	Echo                    bool
+	Env                     []string
+	EnvOverWrite            bool
+	WorkDir                 string
+	Timeout                 time.Duration
 }
 
 // SVN struct
@@ -62,6 +69,7 @@ type SVN struct {
 	echo        bool
 	env         []string
 	targetBase  string
+	globalArg   []string
 }
 
 // NewSVN new svn Instance
@@ -74,11 +82,15 @@ func NewSVN(svnurl string, opts *Options) (*SVN, error) {
 	if len(basePath) > 0 && basePath[len(basePath)-1] == '/' {
 		basePath = basePath[:len(basePath)-1]
 	}
-	return &SVN{
+	targetBase := basePath
+	if !(su.Scheme == "file" || su.Scheme == "") {
+		targetBase = fmt.Sprintf("%s://%s%s", su.Scheme, su.Host, basePath)
+	}
+	return (&SVN{
 		svnurl:      su,
-		targetBase:  fmt.Sprintf("%s://%s%s", su.Scheme, su.Host, basePath),
+		targetBase:  targetBase,
 		svnExecPath: "svn",
-	}, nil
+	}).initGlobalArg(opts), nil
 }
 
 // Blame file
@@ -92,6 +104,21 @@ func (s *SVN) Blame(path string) (br *BlameResp, err error) {
 func (s *SVN) List(path string) (lr *ListResp, err error) {
 	lr = &ListResp{}
 	err = s.execTOXML(lr, CMDList, s.targetBase+path)
+	return
+}
+
+// Log Log
+func (s *SVN) Log(path string) (lor *LogResp, err error) {
+	lor = &LogResp{}
+	// -v show detail log
+	err = s.execTOXML(lor, CMDLog, "-v", s.targetBase+path)
+	return
+}
+
+// Info Info
+func (s *SVN) Info(path string) (ir *InfoResp, err error) {
+	ir = &InfoResp{}
+	err = s.execTOXML(ir, CMDInfo, s.targetBase+path)
 	return
 }
 
@@ -114,7 +141,7 @@ func (s *SVN) Tags() ([]string, error) {
 }
 
 func (s *SVN) listDir(path string) ([]string, error) {
-	lr, err := s.List(BranchesDir)
+	lr, err := s.List(path)
 	if err != nil {
 		return nil, err
 	}
@@ -142,15 +169,43 @@ func (s *SVN) setTimeout(c *exec.Cmd, td *bool) {
 	}
 }
 
-func (s *SVN) globalArg() []string {
+func (s *SVN) initGlobalArg(opts *Options) *SVN {
+	if opts == nil {
+		return s
+	}
 	arg := make([]string, 0)
-	if username := s.svnurl.User.Username(); username != "" {
-		arg = append(arg, "--username", username)
-		if password, ok := s.svnurl.User.Password(); ok {
-			arg = append(arg, "--password", password)
+	if s.svnurl.User != nil {
+		if username := s.svnurl.User.Username(); username != "" {
+			arg = append(arg, "--username", username)
+			if password, ok := s.svnurl.User.Password(); ok {
+				arg = append(arg, "--password", password)
+			}
 		}
 	}
-	return arg
+	if opts.ForceInteractiv {
+		arg = append(arg, "--force-interactive")
+	}
+	if opts.NoAuthCache {
+		arg = append(arg, "--no-auth-cache")
+	}
+	if opts.NonInteractive {
+		arg = append(arg, "--non-interactive")
+	}
+	switch opts.TrustServerCertFailures {
+	case CAUnknownCa, CAOther, CAExpired, CACnMismatch, CANotYetValid:
+		arg = append(arg, "--trust-server-cert-failures", string(opts.TrustServerCertFailures))
+	}
+	s.timeout = opts.Timeout
+	s.globalArg = arg
+	s.echo = opts.Echo
+	s.env = os.Environ()
+	s.workdir = opts.WorkDir
+	if opts.EnvOverWrite {
+		s.env = opts.Env
+	} else {
+		s.env = append(s.env, opts.Env...)
+	}
+	return s
 }
 
 func (s *SVN) execTOXML(v interface{}, cmd string, arg ...string) error {
@@ -165,11 +220,10 @@ func (s *SVN) execTOXML(v interface{}, cmd string, arg ...string) error {
 }
 
 func (s *SVN) execCMD(cmd string, arg ...string) ([]byte, error) {
-	garg := s.globalArg()
-	combinedArg := make([]string, len(arg)+len(garg)+1)
+	combinedArg := make([]string, len(arg)+len(s.globalArg)+1)
 	combinedArg[0] = cmd
-	copy(combinedArg[1:], garg)
-	copy(combinedArg[1+len(garg):], arg)
+	copy(combinedArg[1:], s.globalArg)
+	copy(combinedArg[1+len(s.globalArg):], arg)
 	if s.echo {
 		fmt.Printf("exec %s %s\n", s.svnExecPath, strings.Join(combinedArg, " "))
 	}
@@ -179,6 +233,7 @@ func (s *SVN) execCMD(cmd string, arg ...string) ([]byte, error) {
 	c.Stdout = stdout
 	c.Stderr = stderr
 	c.Dir = s.workdir
+	c.Env = s.env
 	var td bool
 	s.setTimeout(c, &td)
 	if err := c.Run(); err != nil || td {

@@ -18,10 +18,10 @@ the go library bridge svn command
  - [ ]  export
  - [ ]  help (?, h)
  - [ ]  import
- - [ ]  info
+ - [x]  info
  - [x]  list (ls)
  - [ ]  lock
- - [ ]  log
+ - [x]  log
  - [ ]  merge
  - [ ]  mergeinfo
  - [ ]  mkdir
