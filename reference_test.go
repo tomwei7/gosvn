@@ -1,6 +1,7 @@
 package svn
 
 import (
+	"encoding/xml"
 	"testing"
 )
 
@@ -30,8 +31,8 @@ var testBlameXML = []byte(`<?xml version="1.0" encoding="UTF-8"?>
 `)
 
 func TestNewBlameResp(t *testing.T) {
-	br, err := NewBlameResp(testBlameXML)
-	if err != nil {
+	br := &BlameResp{}
+	if err := xml.Unmarshal(testBlameXML, br); err != nil {
 		t.Errorf("Error %s", err.Error())
 	}
 	if len(br.BlameTarget.Entrys) != 3 {
