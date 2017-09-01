@@ -6,6 +6,47 @@ import (
 	"time"
 )
 
+// CMD for svn
+const (
+	CMDAdd        = "add"
+	CMDAuth       = "auth"
+	CMDBlame      = "blame"
+	CMDCat        = "cat"
+	CMDChangelist = "changelist"
+	CMDCheckout   = "checkout"
+	CMDCleanup    = "cleanup"
+	CMDCommit     = "commit"
+	CMDCopy       = "copy"
+	CMDDelete     = "delete"
+	CMDDiff       = "diff"
+	CMDExport     = "export"
+	CMDHelp       = "help"
+	CMDImport     = "import"
+	CMDInfo       = "info"
+	CMDList       = "list"
+	CMDLock       = "lock"
+	CMDLog        = "log"
+	CMDMerge      = "merge"
+	CMDMergeinfo  = "mergeinfo"
+	CMDMkdir      = "mkdir"
+	CMDMove       = "move"
+	CMDPatch      = "patch"
+	CMDPropdel    = "propdel"
+	CMDPropedit   = "propedit"
+	CMDPropget    = "propget"
+	CMDProplist   = "proplist"
+	CMDPropset    = "propset"
+	CMDRelocate   = "relocate"
+	CMDResolve    = "resolve"
+	CMDResolved   = "resolved"
+	CMDRevert     = "revert"
+	CMDStatus     = "status"
+	CMDSwitch     = "switch"
+	CMDUnlock     = "unlock"
+	CMDUpdate     = "update"
+	CMDUpgrade    = "upgrade"
+)
+
 // Kind
 const (
 	KindFile = "file"

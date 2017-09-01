@@ -4,18 +4,18 @@ the go library bridge svn command
 
 ### Available subcommands:
 
- - [ ]  add
+ - [x]  add
  - [ ]  auth
  - [x]  blame (praise, annotate, ann)
  - [ ]  cat
  - [ ]  changelist (cl)
  - [ ]  checkout (co)
- - [ ]  cleanup
- - [ ]  commit (ci)
+ - [x]  cleanup
+ - [x]  commit (ci)
  - [ ]  copy (cp)
  - [ ]  delete (del, remove, rm)
- - [ ]  diff (di)
- - [ ]  export
+ - [ ]  diff (di) #TODO
+ - [ ]  export 
  - [ ]  help (?, h)
  - [ ]  import
  - [x]  info

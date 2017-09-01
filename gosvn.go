@@ -25,19 +25,14 @@ const (
 	CAOther       CAFailArg = "other"
 )
 
-// CMD for svn
-const (
-	CMDBlame = "blame"
-	CMDList  = "list"
-	CMDLog   = "log"
-	CMDInfo  = "info"
-)
-
 // SVN DIR
 const (
 	BranchesDir = "/branches"
 	TagsDir     = "/tags"
 )
+
+// ErrRepoType Err when you want exec local repo only cmd, e.g. add
+var ErrRepoType = fmt.Errorf("cmd not available local repo only")
 
 // Options svn options
 type Options struct {
@@ -58,18 +53,26 @@ type Options struct {
 	EnvOverWrite            bool
 	WorkDir                 string
 	Timeout                 time.Duration
+	ConfigDir               string //--config-dir read user configuration files from directory ARG
+	// --config-option
+	//set user configuration option in the format:
+	//  FILE:SECTION:OPTION=[VALUE]
+	//For example:
+	//servers:global:http-library=serf
+	ConfigOption string
 }
 
 // SVN struct
 type SVN struct {
 	svnurl      *url.URL
-	workdir     string
+	workDir     string
 	svnExecPath string
 	timeout     time.Duration
 	echo        bool
 	env         []string
 	targetBase  string
 	globalArg   []string
+	localRepo   bool
 }
 
 // NewSVN new svn Instance
@@ -82,16 +85,54 @@ func NewSVN(svnurl string, opts *Options) (*SVN, error) {
 	if len(basePath) > 0 && basePath[len(basePath)-1] == '/' {
 		basePath = basePath[:len(basePath)-1]
 	}
+	localRepo := true
+	var workDir string
 	targetBase := basePath
 	if !(su.Scheme == "file" || su.Scheme == "") {
 		targetBase = fmt.Sprintf("%s://%s%s", su.Scheme, su.Host, basePath)
+		localRepo = false
+	} else {
+		workDir = targetBase
 	}
 	return (&SVN{
 		svnurl:      su,
 		targetBase:  targetBase,
 		svnExecPath: "svn",
+		localRepo:   localRepo,
+		workDir:     workDir,
 	}).initGlobalArg(opts), nil
 }
+
+// local path only command
+
+// Add file
+func (s *SVN) Add(localPath string, opts map[string]interface{}) error {
+	if !s.localRepo {
+		return ErrRepoType
+	}
+	_, err := s.execCMD(CMDAdd, localPath)
+	return err
+}
+
+// Commit file
+func (s *SVN) Commit(localPath, msg string, opts map[string]interface{}) error {
+	if !s.localRepo {
+		return ErrRepoType
+	}
+	_, err := s.execCMD(CMDCommit, localPath, "-m", msg)
+	return err
+}
+
+// Cleanup Cleanup
+func (s *SVN) Cleanup(localPath string, opts map[string]interface{}) error {
+	if !s.localRepo {
+		return ErrRepoType
+	}
+	_, err := s.execCMD(CMDCleanup, localPath)
+	return err
+}
+
+// remote able command
 
 // Blame file
 func (s *SVN) Blame(path string) (br *BlameResp, err error) {
@@ -191,6 +232,12 @@ func (s *SVN) initGlobalArg(opts *Options) *SVN {
 	if opts.NonInteractive {
 		arg = append(arg, "--non-interactive")
 	}
+	if opts.ConfigDir != "" {
+		arg = append(arg, "--config-dir", opts.ConfigDir)
+	}
+	if opts.ConfigOption != "" {
+		arg = append(arg, "--config-option", opts.ConfigOption)
+	}
 	switch opts.TrustServerCertFailures {
 	case CAUnknownCa, CAOther, CAExpired, CACnMismatch, CANotYetValid:
 		arg = append(arg, "--trust-server-cert-failures", string(opts.TrustServerCertFailures))
@@ -199,7 +246,9 @@ func (s *SVN) initGlobalArg(opts *Options) *SVN {
 	s.globalArg = arg
 	s.echo = opts.Echo
 	s.env = os.Environ()
-	s.workdir = opts.WorkDir
+	if opts.WorkDir != "" {
+		s.workDir = opts.WorkDir
+	}
 	if opts.EnvOverWrite {
 		s.env = opts.Env
 	} else {
@@ -232,7 +281,7 @@ func (s *SVN) execCMD(cmd string, arg ...string) ([]byte, error) {
 	stderr := &bytes.Buffer{}
 	c.Stdout = stdout
 	c.Stderr = stderr
-	c.Dir = s.workdir
+	c.Dir = s.workDir
 	c.Env = s.env
 	var td bool
 	s.setTimeout(c, &td)

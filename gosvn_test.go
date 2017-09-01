@@ -12,7 +12,7 @@ var svnurl string
 func init() {
 	svnurl = os.Getenv("TEST_SVNURL")
 	var err error
-	svn, err = NewSVN(svnurl, &Options{Echo: true})
+	svn, err = NewSVN(svnurl, &Options{Echo: true, WorkDir: "."})
 	if err != nil {
 		log.Fatal(err)
 	}
