@@ -9,10 +9,10 @@ the go library bridge svn command
  - [x]  blame (praise, annotate, ann)
  - [ ]  cat
  - [ ]  changelist (cl)
- - [ ]  checkout (co)
+ - [x]  checkout (co)
  - [x]  cleanup
  - [x]  commit (ci)
- - [ ]  copy (cp)
+ - [x]  copy (cp)
  - [ ]  delete (del, remove, rm)
  - [ ]  diff (di) #TODO
  - [ ]  export 

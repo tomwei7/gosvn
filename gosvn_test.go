@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"testing"
+	"time"
 )
 
 var svn *SVN
@@ -12,7 +13,7 @@ var svnurl string
 func init() {
 	svnurl = os.Getenv("TEST_SVNURL")
 	var err error
-	svn, err = NewSVN(svnurl, &Options{Echo: true, WorkDir: "."})
+	svn, err = NewSVN(svnurl, &Options{Echo: true, WorkDir: ".", Timeout: 3 * time.Second})
 	if err != nil {
 		log.Fatal(err)
 	}

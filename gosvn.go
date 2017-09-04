@@ -3,6 +3,7 @@ package svn
 
 import (
 	"bytes"
+	"context"
 	"encoding/xml"
 	"fmt"
 	"io/ioutil"
@@ -25,14 +26,23 @@ const (
 	CAOther       CAFailArg = "other"
 )
 
+// repo type
+const (
+	LocalRepo int = iota
+	RemoteRepo
+)
+
 // SVN DIR
 const (
 	BranchesDir = "/branches"
 	TagsDir     = "/tags"
 )
 
-// ErrRepoType Err when you want exec local repo only cmd, e.g. add
-var ErrRepoType = fmt.Errorf("cmd not available local repo only")
+// ErrRepoTypeLocal Err when you want exec local repo only cmd, e.g. add
+var ErrRepoTypeLocal = fmt.Errorf("cmd not available, local repo only")
+
+// ErrRepoTypeRemote Err when you want exec remote repo only cmd, e.g. checkout
+var ErrRepoTypeRemote = fmt.Errorf("cmd not available, remote repo only")
 
 // Options svn options
 type Options struct {
@@ -103,21 +113,38 @@ func NewSVN(svnurl string, opts *Options) (*SVN, error) {
 	}).initGlobalArg(opts), nil
 }
 
+// Kind return svn kind LocalRepo or RemoteRepo
+func (s *SVN) Kind() int {
+	if s.localRepo {
+		return LocalRepo
+	}
+	return RemoteRepo
+}
+
 // local path only command
 
 // Add file
 func (s *SVN) Add(localPath string, opts map[string]interface{}) error {
 	if !s.localRepo {
-		return ErrRepoType
+		return ErrRepoTypeLocal
 	}
 	_, err := s.execCMD(CMDAdd, localPath)
+	return err
+}
+
+// Checkout repo to local
+func (s *SVN) Checkout(localPath string, opts map[string]interface{}) error {
+	if s.localRepo {
+		return ErrRepoTypeRemote
+	}
+	_, err := s.execCMD(CMDCheckout, s.targetBase, localPath)
 	return err
 }
 
 // Commit file
 func (s *SVN) Commit(localPath, msg string, opts map[string]interface{}) error {
 	if !s.localRepo {
-		return ErrRepoType
+		return ErrRepoTypeLocal
 	}
 	_, err := s.execCMD(CMDCommit, localPath, "-m", msg)
 	return err
@@ -126,9 +153,15 @@ func (s *SVN) Commit(localPath, msg string, opts map[string]interface{}) error {
 // Cleanup Cleanup
 func (s *SVN) Cleanup(localPath string, opts map[string]interface{}) error {
 	if !s.localRepo {
-		return ErrRepoType
+		return ErrRepoTypeLocal
 	}
 	_, err := s.execCMD(CMDCleanup, localPath)
+	return err
+}
+
+// Copy Copy
+func (s *SVN) Copy(src, dst string) error {
+	_, err := s.execCMD(CMDCopy, s.targetBase+src, s.targetBase+dst)
 	return err
 }
 
@@ -201,13 +234,10 @@ func (s *SVN) setTimeout(c *exec.Cmd, td *bool) {
 		return
 	}
 	timer := time.NewTimer(s.timeout)
-	for _ = range timer.C {
-		if c.ProcessState.Exited() {
-			// FIXME deal kill error
-			c.Process.Kill()
-			*td = true
-		}
-	}
+	<-timer.C
+	// FIXME deal kill error
+	c.Process.Kill()
+	*td = true
 }
 
 func (s *SVN) initGlobalArg(opts *Options) *SVN {
@@ -276,20 +306,21 @@ func (s *SVN) execCMD(cmd string, arg ...string) ([]byte, error) {
 	if s.echo {
 		fmt.Printf("exec %s %s\n", s.svnExecPath, strings.Join(combinedArg, " "))
 	}
-	c := exec.Command(s.svnExecPath, combinedArg...)
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
+	ctx, cancel := context.WithTimeout(context.TODO(), s.timeout)
+	defer cancel()
+	c := exec.CommandContext(ctx, s.svnExecPath, combinedArg...)
 	c.Stdout = stdout
 	c.Stderr = stderr
 	c.Dir = s.workDir
 	c.Env = s.env
-	var td bool
-	s.setTimeout(c, &td)
-	if err := c.Run(); err != nil || td {
-		fullcmd := fmt.Sprintf("%s %s", s.svnExecPath, strings.Join(combinedArg, " "))
-		if td {
-			return nil, fmt.Errorf("cmd: %s timeout", fullcmd)
-		}
+	err := c.Run()
+	fullcmd := fmt.Sprintf("%s %s", s.svnExecPath, strings.Join(combinedArg, " "))
+	if ctx.Err() == context.DeadlineExceeded {
+		return nil, fmt.Errorf("exec %s timeout", fullcmd)
+	}
+	if err != nil {
 		return nil, fmt.Errorf("exec error cmd: %s\n, err: %s stderr:\n%s", fullcmd, err.Error(), stderr.String())
 	}
 	return ioutil.ReadAll(stdout)
