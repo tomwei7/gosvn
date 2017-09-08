@@ -24,7 +24,7 @@ the go library bridge svn command
  - [x]  log
  - [ ]  merge
  - [ ]  mergeinfo
- - [ ]  mkdir
+ - [x]  mkdir
  - [ ]  move (mv, rename, ren)
  - [ ]  patch
  - [ ]  propdel (pdel, pd)

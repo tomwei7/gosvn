@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path"
 	"strings"
 	"time"
 )
@@ -34,9 +35,9 @@ const (
 
 // SVN DIR
 const (
-	DefaultBranchesDir = "/branches"
-	DefaultTagsDir     = "/tags"
-	DefaultTrunkDir    = "/trunk"
+	DefaultBranchesDir = "branches"
+	DefaultTagsDir     = "tags"
+	DefaultTrunkDir    = "trunk"
 )
 
 // ErrRepoTypeLocal Err when you want exec local repo only cmd, e.g. add
@@ -47,6 +48,7 @@ var ErrRepoTypeRemote = fmt.Errorf("cmd not available, remote repo only")
 
 // Options svn options
 type Options struct {
+	SVNExecPath     string
 	NoAuthCache     bool // do not cache authentication tokens
 	NonInteractive  bool // do no interactive prompting (default is to prompt only if standard input is a terminal device)
 	ForceInteractiv bool // do interactive prompting even if standard input is not a terminal device
@@ -70,28 +72,30 @@ type Options struct {
 	//  FILE:SECTION:OPTION=[VALUE]
 	//For example:
 	//servers:global:http-library=serf
-	ConfigOption string
-	BranchesDir  string
-	TagsDir      string
-	TrunkDir     string
-	Username     string
-	Password     string
+	ConfigOption   string
+	BranchesDir    string
+	TagsDir        string
+	TrunkDir       string
+	Username       string
+	Password       string
+	NoBranchesTags bool
 }
 
 // SVN struct
 type SVN struct {
-	svnurl      *url.URL
-	workDir     string
-	svnExecPath string
-	timeout     time.Duration
-	echo        bool
-	env         []string
-	targetBase  string
-	globalArg   []string
-	localRepo   bool
-	branchesDir string
-	tagsDir     string
-	trunkDir    string
+	svnurl         *url.URL
+	workDir        string
+	svnExecPath    string
+	timeout        time.Duration
+	echo           bool
+	env            []string
+	targetBase     string
+	globalArg      []string
+	localRepo      bool
+	branchesDir    string
+	tagsDir        string
+	trunkDir       string
+	NoBranchesTags bool
 }
 
 // NewSVN new svn Instance
@@ -101,8 +105,8 @@ func NewSVN(svnurl string, opts *Options) (*SVN, error) {
 		return nil, err
 	}
 	basePath := su.Path
-	if len(basePath) > 0 && basePath[len(basePath)-1] == '/' {
-		basePath = basePath[:len(basePath)-1]
+	if len(basePath) == 0 || basePath[len(basePath)-1] != '/' {
+		basePath = basePath + "/"
 	}
 	localRepo := true
 	var workDir string
@@ -122,15 +126,19 @@ func NewSVN(svnurl string, opts *Options) (*SVN, error) {
 	if opts.TrunkDir == "" {
 		opts.TrunkDir = DefaultTrunkDir
 	}
+	if opts.SVNExecPath == "" {
+		opts.SVNExecPath = "svn"
+	}
 	return (&SVN{
-		svnurl:      su,
-		targetBase:  targetBase,
-		svnExecPath: "svn",
-		localRepo:   localRepo,
-		workDir:     workDir,
-		branchesDir: opts.BranchesDir,
-		tagsDir:     opts.TagsDir,
-		trunkDir:    opts.TrunkDir,
+		svnurl:         su,
+		targetBase:     targetBase,
+		svnExecPath:    opts.SVNExecPath,
+		localRepo:      localRepo,
+		workDir:        workDir,
+		branchesDir:    opts.BranchesDir,
+		tagsDir:        opts.TagsDir,
+		trunkDir:       opts.TrunkDir,
+		NoBranchesTags: opts.NoBranchesTags,
 	}).initGlobalArg(opts), nil
 }
 
@@ -163,16 +171,16 @@ func (s *SVN) Checkout(localPath string, opts map[string]interface{}) error {
 }
 
 // Commit file
-func (s *SVN) Commit(localPath, msg string, opts map[string]interface{}) error {
+func (s *SVN) Commit(path, msg string, opts map[string]interface{}) error {
 	if !s.localRepo {
 		return ErrRepoTypeLocal
 	}
-	_, err := s.execCMD(CMDCommit, localPath, "-m", msg)
+	_, err := s.execCMD(CMDCommit, path, "-m", msg)
 	return err
 }
 
 // Cleanup Cleanup
-func (s *SVN) Cleanup(localPath string, opts map[string]interface{}) error {
+func (s *SVN) Cleanup(localPath string) error {
 	if !s.localRepo {
 		return ErrRepoTypeLocal
 	}
@@ -181,8 +189,8 @@ func (s *SVN) Cleanup(localPath string, opts map[string]interface{}) error {
 }
 
 // Copy Copy
-func (s *SVN) Copy(src, dst string) error {
-	_, err := s.execCMD(CMDCopy, s.targetBase+src, s.targetBase+dst)
+func (s *SVN) Copy(src, dst, msg string) error {
+	_, err := s.execCMD(CMDCopy, s.targetBase+src, s.targetBase+dst, "-m", msg)
 	return err
 }
 
@@ -202,11 +210,26 @@ func (s *SVN) List(path string) (lr *ListResp, err error) {
 	return
 }
 
+// Mkdir Mkdir
+func (s *SVN) Mkdir(path string) error {
+	_, err := s.execCMD(CMDMkdir, s.targetBase+path)
+	return err
+}
+
 // Log Log
-func (s *SVN) Log(path string) (lor *LogResp, err error) {
+//  -r [--revision] ARG      : ARG (some commands also take ARG1:ARG2 range)
+//                             A revision argument can be one of:
+//                                NUMBER       revision number
+//                                '{' DATE '}' revision at start of the date
+//                                'HEAD'       latest in repository
+//                                'BASE'       base rev of item's working copy
+//                                'COMMITTED'  last commit at or before BASE
+//                                'PREV'       revision just before COMMITTED
+func (s *SVN) Log(path string, args ...string) (lor *LogResp, err error) {
 	lor = &LogResp{}
+	args = append(args, "-v", s.targetBase+path)
 	// -v show detail log
-	err = s.execTOXML(lor, CMDLog, "-v", s.targetBase+path)
+	err = s.execTOXML(lor, CMDLog, args...)
 	return
 }
 
@@ -230,9 +253,19 @@ func (s *SVN) Branches() ([]string, error) {
 	return s.listDir(s.branchesDir)
 }
 
+// NewBranch new brach from trunk
+func (s *SVN) NewBranch(name, msg string) error {
+	return s.Copy(s.trunkDir, path.Join(s.branchesDir, name), msg)
+}
+
 // Tags list all tag
 func (s *SVN) Tags() ([]string, error) {
 	return s.listDir(s.tagsDir)
+}
+
+// NewTag new tag from trunk
+func (s *SVN) NewTag(name, msg string) error {
+	return s.Copy(s.trunkDir, path.Join(s.tagsDir, name), msg)
 }
 
 func (s *SVN) listDir(path string) ([]string, error) {
@@ -332,8 +365,12 @@ func (s *SVN) execCMD(cmd string, arg ...string) ([]byte, error) {
 	}
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	ctx, cancel := context.WithTimeout(context.TODO(), s.timeout)
-	defer cancel()
+	ctx := context.TODO()
+	if s.timeout != 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, s.timeout)
+		defer cancel()
+	}
 	c := exec.CommandContext(ctx, s.svnExecPath, combinedArg...)
 	c.Stdout = stdout
 	c.Stderr = stderr

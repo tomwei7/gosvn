@@ -3,73 +3,121 @@ package svn
 import (
 	"log"
 	"os"
+	"path"
 	"testing"
 	"time"
 )
 
+const localSVNPath = "testrepo"
+
 var svn *SVN
+var localSVN *SVN
 var svnurl string
+var workDir string
 
 func init() {
 	svnurl = os.Getenv("TEST_SVNURL")
+	workDir = os.Getenv("WORKDIR")
 	var err error
-	svn, err = NewSVN(svnurl, &Options{Echo: true, WorkDir: ".", Timeout: 3 * time.Second})
+	opts := &Options{Echo: os.Getenv("ECHO") != "", WorkDir: workDir, Timeout: 3 * time.Second, Username: os.Getenv("SVNUSER"), Password: os.Getenv("SVNPASSWD")}
+	svn, err = NewSVN(svnurl, opts)
 	if err != nil {
+		log.Fatal(err)
+	}
+	localSVN, err = NewSVN(localSVNPath, opts)
+	if err != nil {
+		log.Fatal(err)
+	}
+	InitLocalRepo()
+}
+
+func InitLocalRepo() {
+	if err := svn.Checkout(localSVNPath, nil); err != nil {
+		log.Fatal(err)
+	}
+	if err := localSVN.Mkdir(DefaultBranchesDir); err != nil {
+		log.Fatal(err)
+	}
+	if err := localSVN.Mkdir(DefaultTrunkDir); err != nil {
+		log.Fatal(err)
+	}
+	if err := localSVN.Mkdir(DefaultTagsDir); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func TestBlame(t *testing.T) {
-	_, err := svn.Blame("/trunk/test.md")
+func TestSVNAddCommit(t *testing.T) {
+	fn := path.Join(workDir, localSVNPath, DefaultTrunkDir, "sample.txt")
+	fp, err := os.OpenFile(fn, os.O_CREATE|os.O_WRONLY, 0644)
+	fp.WriteString("# SVN Test File\n")
 	if err != nil {
+		t.Fatal(err)
+	}
+	defer fp.Close()
+	if err := localSVN.Add(fn, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := localSVN.Commit(localSVNPath, "add sample.txt", nil); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSVNAddCommit2(t *testing.T) {
+	fn := path.Join(workDir, localSVNPath, DefaultTrunkDir, "sample.txt")
+	fp, err := os.OpenFile(fn, os.O_CREATE|os.O_WRONLY, 0644)
+	fp.WriteString("# SVN Test File Line\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fp.Close()
+	if err := localSVN.Commit(localSVNPath, "update sample.txt", nil); err != nil {
+		t.Fatal(err)
+	}
+}
+func TestCleanUp(t *testing.T) {
+	if err := localSVN.Cleanup(localSVNPath); err != nil {
 		t.Error(err)
 	}
 }
 
-func TestList(t *testing.T) {
-	ret, err := svn.List("/")
-	if err != nil {
-		t.Error(err)
+func inArray(a []string, str string) bool {
+	for _, s := range a {
+		if str == s {
+			return true
+		}
 	}
-	if len(ret.Files) != 3 {
-		t.Errorf("%+v", *ret)
-	}
+	return false
 }
 
-func TestBranches(t *testing.T) {
-	ret, err := svn.Branches()
-	if err != nil {
-		t.Error(err)
+func TestNewBranch(t *testing.T) {
+	bn := "develop"
+	if err := svn.NewBranch(bn, "create branch develop"); err != nil {
+		t.Fatal(err)
 	}
-	if len(ret) != 2 {
-		t.Errorf("%+v", ret)
+	if branches, err := svn.Branches(); err != nil {
+		t.Error(err)
+	} else if !inArray(branches, bn) {
+		t.Error("new branch fail, not exists")
 	}
 }
-
-func TestTags(t *testing.T) {
-	ret, err := svn.Tags()
-	if err != nil {
-		t.Error(err)
+func TestNewTag(t *testing.T) {
+	tn := "v0.1"
+	if err := svn.NewTag(tn, "create tag v0.1"); err != nil {
+		t.Fatal(err)
 	}
-	if len(ret) != 2 {
-		t.Errorf("%+v", ret)
+	if tages, err := svn.Tags(); err != nil {
+		t.Error(err)
+	} else if !inArray(tages, tn) {
+		t.Error("new tag fail, not exists")
 	}
 }
 
 func TestLog(t *testing.T) {
-	ret, err := svn.Log("/trunk/testlog.txt")
+	lr, err := svn.Log(path.Join(svn.trunkDir, "sample.txt"))
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
-	if len(ret.Logentrys) != 2 {
-		t.Errorf("%+v", ret)
+	if len(lr.Logentrys) != 2 {
+		t.Errorf("log error expect 2 logentry get %d", len(lr.Logentrys))
 	}
-}
-
-func TestInfo(t *testing.T) {
-	ret, err := svn.Info("/trunk/testlog.txt")
-	if err != nil {
-		t.Error(err)
-	}
-	t.Log("%v", ret)
 }
