@@ -34,8 +34,9 @@ const (
 
 // SVN DIR
 const (
-	BranchesDir = "/branches"
-	TagsDir     = "/tags"
+	DefaultBranchesDir = "/branches"
+	DefaultTagsDir     = "/tags"
+	DefaultTrunkDir    = "/trunk"
 )
 
 // ErrRepoTypeLocal Err when you want exec local repo only cmd, e.g. add
@@ -70,6 +71,11 @@ type Options struct {
 	//For example:
 	//servers:global:http-library=serf
 	ConfigOption string
+	BranchesDir  string
+	TagsDir      string
+	TrunkDir     string
+	Username     string
+	Password     string
 }
 
 // SVN struct
@@ -83,6 +89,9 @@ type SVN struct {
 	targetBase  string
 	globalArg   []string
 	localRepo   bool
+	branchesDir string
+	tagsDir     string
+	trunkDir    string
 }
 
 // NewSVN new svn Instance
@@ -104,12 +113,24 @@ func NewSVN(svnurl string, opts *Options) (*SVN, error) {
 	} else {
 		workDir = targetBase
 	}
+	if opts.BranchesDir == "" {
+		opts.BranchesDir = DefaultBranchesDir
+	}
+	if opts.TagsDir == "" {
+		opts.TagsDir = DefaultTagsDir
+	}
+	if opts.TrunkDir == "" {
+		opts.TrunkDir = DefaultTrunkDir
+	}
 	return (&SVN{
 		svnurl:      su,
 		targetBase:  targetBase,
 		svnExecPath: "svn",
 		localRepo:   localRepo,
 		workDir:     workDir,
+		branchesDir: opts.BranchesDir,
+		tagsDir:     opts.TagsDir,
+		trunkDir:    opts.TrunkDir,
 	}).initGlobalArg(opts), nil
 }
 
@@ -206,12 +227,12 @@ func (s *SVN) Info(path string) (ir *InfoResp, err error) {
 //└── trunk
 //    └── test.md
 func (s *SVN) Branches() ([]string, error) {
-	return s.listDir(BranchesDir)
+	return s.listDir(s.branchesDir)
 }
 
 // Tags list all tag
 func (s *SVN) Tags() ([]string, error) {
-	return s.listDir(TagsDir)
+	return s.listDir(s.tagsDir)
 }
 
 func (s *SVN) listDir(path string) ([]string, error) {
@@ -252,6 +273,9 @@ func (s *SVN) initGlobalArg(opts *Options) *SVN {
 				arg = append(arg, "--password", password)
 			}
 		}
+	} else if opts.Username != "" && opts.Password != "" {
+		arg = append(arg, "--username", opts.Username)
+		arg = append(arg, "--password", opts.Password)
 	}
 	if opts.ForceInteractiv {
 		arg = append(arg, "--force-interactive")
