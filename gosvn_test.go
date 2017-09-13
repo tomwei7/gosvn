@@ -1,6 +1,7 @@
 package svn
 
 import (
+	"io/ioutil"
 	"log"
 	"os"
 	"path"
@@ -32,7 +33,7 @@ func init() {
 }
 
 func InitLocalRepo() {
-	if err := svn.Checkout(localSVNPath, nil); err != nil {
+	if err := svn.Checkout("", localSVNPath); err != nil {
 		log.Fatal(err)
 	}
 	if err := localSVN.Mkdir(DefaultBranchesDir); err != nil {
@@ -119,5 +120,24 @@ func TestLog(t *testing.T) {
 	}
 	if len(lr.Logentrys) != 2 {
 		t.Errorf("log error expect 2 logentry get %d", len(lr.Logentrys))
+	}
+}
+
+func TestExport(t *testing.T) {
+	err := svn.Export("trunk/sample.txt", "/tmp/sample.txt", "-r", "1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fp, err := os.Open("/tmp/sample.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fp.Close()
+	data, err := ioutil.ReadAll(fp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "# SVN Test File\n" {
+		t.Error("Export File Err")
 	}
 }

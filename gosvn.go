@@ -157,16 +157,27 @@ func (s *SVN) Add(localPath string, opts map[string]interface{}) error {
 	if !s.localRepo {
 		return ErrRepoTypeLocal
 	}
-	_, err := s.execCMD(CMDAdd, localPath)
+	_, err := s.execCMD(cmdAdd, localPath)
 	return err
 }
 
 // Checkout repo to local
-func (s *SVN) Checkout(localPath string, opts map[string]interface{}) error {
+func (s *SVN) Checkout(remotePath, localPath string, args ...string) error {
 	if s.localRepo {
 		return ErrRepoTypeRemote
 	}
-	_, err := s.execCMD(CMDCheckout, s.targetBase, localPath)
+	args = append(args, s.targetBase, localPath)
+	_, err := s.execCMD(cmdCheckout, args...)
+	return err
+}
+
+// Export repo
+func (s *SVN) Export(remotePath, localPath string, args ...string) error {
+	if s.localRepo {
+		return ErrRepoTypeRemote
+	}
+	args = append(args, s.targetBase+remotePath, localPath)
+	_, err := s.execCMD(cmdExport, args...)
 	return err
 }
 
@@ -175,7 +186,7 @@ func (s *SVN) Commit(path, msg string, opts map[string]interface{}) error {
 	if !s.localRepo {
 		return ErrRepoTypeLocal
 	}
-	_, err := s.execCMD(CMDCommit, path, "-m", msg)
+	_, err := s.execCMD(cmdCommit, path, "-m", msg)
 	return err
 }
 
@@ -184,13 +195,13 @@ func (s *SVN) Cleanup(localPath string) error {
 	if !s.localRepo {
 		return ErrRepoTypeLocal
 	}
-	_, err := s.execCMD(CMDCleanup, localPath)
+	_, err := s.execCMD(cmdCleanup, localPath)
 	return err
 }
 
 // Copy Copy
 func (s *SVN) Copy(src, dst, msg string) error {
-	_, err := s.execCMD(CMDCopy, s.targetBase+src, s.targetBase+dst, "-m", msg)
+	_, err := s.execCMD(cmdCopy, s.targetBase+src, s.targetBase+dst, "-m", msg)
 	return err
 }
 
@@ -199,20 +210,20 @@ func (s *SVN) Copy(src, dst, msg string) error {
 // Blame file
 func (s *SVN) Blame(path string) (br *BlameResp, err error) {
 	br = &BlameResp{}
-	err = s.execTOXML(br, CMDBlame, s.targetBase+path)
+	err = s.execTOXML(br, cmdBlame, s.targetBase+path)
 	return
 }
 
 // List Dir
 func (s *SVN) List(path string) (lr *ListResp, err error) {
 	lr = &ListResp{}
-	err = s.execTOXML(lr, CMDList, s.targetBase+path)
+	err = s.execTOXML(lr, cmdList, s.targetBase+path)
 	return
 }
 
 // Mkdir Mkdir
 func (s *SVN) Mkdir(path string) error {
-	_, err := s.execCMD(CMDMkdir, s.targetBase+path)
+	_, err := s.execCMD(cmdMkdir, s.targetBase+path)
 	return err
 }
 
@@ -229,14 +240,14 @@ func (s *SVN) Log(path string, args ...string) (lor *LogResp, err error) {
 	lor = &LogResp{}
 	args = append(args, "-v", s.targetBase+path)
 	// -v show detail log
-	err = s.execTOXML(lor, CMDLog, args...)
+	err = s.execTOXML(lor, cmdLog, args...)
 	return
 }
 
 // Info Info
 func (s *SVN) Info(path string) (ir *InfoResp, err error) {
 	ir = &InfoResp{}
-	err = s.execTOXML(ir, CMDInfo, s.targetBase+path)
+	err = s.execTOXML(ir, cmdInfo, s.targetBase+path)
 	return
 }
 
@@ -258,6 +269,11 @@ func (s *SVN) NewBranch(name, msg string) error {
 	return s.Copy(s.trunkDir, path.Join(s.branchesDir, name), msg)
 }
 
+// BranchesDir BranchesDir
+func (s *SVN) BranchesDir() string {
+	return s.branchesDir
+}
+
 // Tags list all tag
 func (s *SVN) Tags() ([]string, error) {
 	return s.listDir(s.tagsDir)
@@ -266,6 +282,16 @@ func (s *SVN) Tags() ([]string, error) {
 // NewTag new tag from trunk
 func (s *SVN) NewTag(name, msg string) error {
 	return s.Copy(s.trunkDir, path.Join(s.tagsDir, name), msg)
+}
+
+// TagsDir TagsDir
+func (s *SVN) TagsDir() string {
+	return s.tagsDir
+}
+
+// TrunkDir Trunk Dir
+func (s *SVN) TrunkDir() string {
+	return s.trunkDir
 }
 
 func (s *SVN) listDir(path string) ([]string, error) {
