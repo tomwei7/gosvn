@@ -408,7 +408,7 @@ func (s *SVN) execCMD(cmd string, arg ...string) ([]byte, error) {
 		return nil, fmt.Errorf("exec %s timeout", fullcmd)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("exec error cmd: %s\n, err: %s stderr:\n%s", fullcmd, err.Error(), stderr.String())
+		return nil, NewError(fullcmd, err.Error(), stderr.String())
 	}
 	return ioutil.ReadAll(stdout)
 }
